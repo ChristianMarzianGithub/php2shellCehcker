@@ -45,8 +45,7 @@ export function importTargets(lines:string){
  const entries=lines.split(/\r?\n/).map(s=>s.trim()).filter(s=>s&&!s.startsWith('#'));
  for(const line of entries){
   const u=validateTarget(line.includes('://')?line:'https://'+line);
-  if(u.pathname!=='/'||u.search)throw Error('Please import hostnames or site root URLs only');
-  const url=u.origin+'/';
+  const url=u.toString();
   if(!targets.has(url))targets.set(url,{url,host:u.hostname,token:randomBytes(18).toString('hex'),verified:false,status:'UNVERIFIED'});
  }
  return [...targets.values()];
