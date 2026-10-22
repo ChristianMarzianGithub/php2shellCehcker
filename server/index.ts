@@ -1,6 +1,7 @@
 import express from 'express';
 import {lookup} from 'node:dns/promises';
 import {Agent,request} from 'undici';
+import {pinnedLookup} from './pinnedLookup.js';
 import {z} from 'zod';
 import {validateTarget,isPublicIp} from './validation.js';
 import {createReport} from './assessment.js';
@@ -15,7 +16,7 @@ async function readPublic(raw:string){
   const addresses=await lookup(url.hostname,{all:true,verbatim:true});
   if(!addresses.length||addresses.some(a=>!isPublicIp(a.address)))throw new Error('Blocked DNS result');
   const selected=addresses[0];
-  const agent=new Agent({connect:{lookup:(_h,_o,cb)=>cb(null,selected.address,selected.family)},connections:1});
+  const agent=new Agent({connect:{lookup:pinnedLookup(selected)},connections:1});
   try{
    const response=await request(url.toString(),{dispatcher:agent,method:'GET',maxRedirections:0,headers:{'user-agent':'PHP2Shell-Passive/1.0'},headersTimeout:5000,bodyTimeout:5000,signal:AbortSignal.timeout(8000)});
    const headers:Record<string,string>={};for(const [k,v] of Object.entries(response.headers))headers[k]=Array.isArray(v)?v.join('; '):String(v||'');
