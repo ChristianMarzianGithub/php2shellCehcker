@@ -75,3 +75,19 @@ Compatibility references:
 - https://www.drupal.org/docs/getting-started/system-requirements/php-requirements
 
 Mapping reviewed: October 22, 2026. Joomla version-specific requirements and other CMS products are not yet mapped.
+
+## Administrator bulk assessments
+
+1. Pull the repository and run `npm install`.
+2. Run `npm run setup-admin`, then copy the two generated values into a local `.env` file using `.env.example` as the template.
+3. Run `docker compose up --build` (or set the same environment variables before `npm run dev`).
+4. Open **Administrator** in the application's left navigation and log in with your password.
+5. Import a TXT file with one HTTPS site root (or hostname) per line. Imports are limited to 100 unique hostnames in server memory.
+6. For every domain under your control, publish a TXT record with name `_php2shell-check.yourdomain.example` and the corresponding verification value shown in the administrator table. Click **Check TXT**.
+7. Only DNS-verified domains can be batch-scanned. Use **Scan verified websites** to run sequential passive assessments. Progress refreshes automatically and results can be sorted by evidence confidence, completeness, PHP hints, assessment or domain. Export as CSV.
+
+The example file `examples/100-synthetic-websites.txt` includes **100 fictional names under .invalid**, for UI/import testing only. They do not represent real clubs or businesses, cannot be resolved and cannot pass domain verification.
+
+**Operational limitations:** Batch results and imported targets are stored in RAM, and are lost on server restart. This is an authenticated single-administrator MVP, not a multi-user platform. Runs one batch at a time, waits between domains and revalidates each DNS ownership token. The results list is not a ranking of confirmed vulnerabilities; evidence confidence is explicitly not exploit likelihood.
+
+**Deployment security:** Set `ADMIN_COOKIE_SECURE=true` in `.env` when serving over HTTPS behind a correctly configured reverse proxy. The default is compatible with `http://localhost:8080` for local testing only. Deploy behind TLS, network egress controls and access restrictions; don't expose the admin on plain HTTP. Credentials are stored as a salted scrypt-derived hash, not in frontend code. CSRF protection currently relies on SameSite=Strict cookies; harden further before a public production deployment.
