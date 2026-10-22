@@ -9,7 +9,7 @@ import path from 'node:path';
 import {adminReady,checkPassword,issueSession,requireAdmin,logout,targets,importTargets,verifyTarget} from './admin.js';
 const app=express();app.disable('x-powered-by');app.use(express.json({limit:'5kb'}));
 const rate=new Map<string,{n:number;until:number}>();
-app.use('/api',(req,res,next)=>{const key=req.ip||'unknown',now=Date.now();let r=rate.get(key);if(!r||r.until<now)r={n:0,until:now+60000};r.n++;rate.set(key,r);if(r.n>10){res.status(429).json({error:'Too many scans'});return;}next();});
+app.use('/api',(req,res,next)=>{if(req.path.startsWith('/admin/')&&req.path!=='/admin/login')return next();const key=req.ip||'unknown',now=Date.now();let r=rate.get(key);if(!r||r.until<now)r={n:0,until:now+60000};r.n++;rate.set(key,r);if(r.n>10){res.status(429).json({error:'Too many scans'});return;}next();});
 const input=z.object({url:z.string().max(2048),ownerVersion:z.string().max(100).optional(),distribution:z.string().max(90).optional(),packageRelease:z.string().max(100).optional(),sapi:z.string().max(80).optional(),vendorAdvisory:z.string().max(250).optional()});
 async function readPublic(raw:string){
  let url=validateTarget(raw);
@@ -55,13 +55,16 @@ app.post('/api/scan',async(req,res)=>{
  catch(e){res.status(400).json({error:e instanceof Error?e.message:'Scan failed'});}
 });
 
+const loginAttempts=new Map<string,{n:number;until:number}>();
 const credentials=z.object({password:z.string().min(1).max(1024)});
 app.get('/api/admin/status',requireAdmin,(_req,res)=>res.json({ok:true}));
 app.post('/api/admin/login',(req,res)=>{
+ const key=req.ip||'unknown',now=Date.now();let attempt=loginAttempts.get(key);if(!attempt||attempt.until<now)attempt={n:0,until:now+900000};attempt.n++;loginAttempts.set(key,attempt);
+ if(attempt.n>8){res.status(429).json({error:'Too many login attempts'});return;}
  const p=credentials.safeParse(req.body);
  if(!adminReady()){res.status(503).json({error:'Configure ADMIN_PASSWORD_HASH and ADMIN_SESSION_SECRET first'});return;}
  if(!p.success||!checkPassword(p.data.password)){res.status(401).json({error:'Invalid credentials'});return;}
- issueSession(res);res.json({ok:true});
+ loginAttempts.delete(key);issueSession(res);res.json({ok:true});
 });
 app.post('/api/admin/logout',requireAdmin,logout);
 app.get('/api/admin/targets',requireAdmin,(_req,res)=>res.json([...targets.values()]));
