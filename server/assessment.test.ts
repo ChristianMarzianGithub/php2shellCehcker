@@ -1,0 +1,2 @@
+import {describe,it,expect} from 'vitest';import {assessVersion,createReport} from './assessment';
+describe('patch comparisons',()=>{it('recognizes upstream fixed release',()=>expect(assessVersion('8.3.36').status).toBe('REPORTED PATCHED VERSION'));it('flags older release with caveat',()=>expect(assessVersion('8.3.35').status).toBe('AFFECTED VERSION DETECTED'));it('keeps unknown inconclusive',()=>expect(assessVersion(null).status).toBe('INSUFFICIENT EVIDENCE'));it('builds report',()=>expect(createReport('https://example.org',{},'').findings).toHaveLength(2));});
