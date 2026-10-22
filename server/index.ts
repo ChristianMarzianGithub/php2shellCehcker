@@ -7,7 +7,7 @@ import {validateTarget,isPublicIp} from './validation.js';
 import {createEvidenceReport, type Page} from './assessment.js';
 import path from 'node:path';
 import {adminReady,adminConfigStatus,checkPassword,issueSession,requireAdmin,logout,targets,importTargets,verifyTarget} from './admin.js';
-const app=express();app.disable('x-powered-by');app.use(express.json({limit:'5kb'}));
+const app=express();app.disable('x-powered-by');app.use(express.json({limit:'2mb'}));
 const rate=new Map<string,{n:number;until:number}>();
 app.use('/api',(req,res,next)=>{if(req.path.startsWith('/admin/')&&req.path!=='/admin/login')return next();const key=req.ip||'unknown',now=Date.now();let r=rate.get(key);if(!r||r.until<now)r={n:0,until:now+60000};r.n++;rate.set(key,r);if(r.n>10){res.status(429).json({error:'Too many scans'});return;}next();});
 const input=z.object({url:z.string().max(2048),ownerVersion:z.string().max(100).optional(),distribution:z.string().max(90).optional(),packageRelease:z.string().max(100).optional(),sapi:z.string().max(80).optional(),vendorAdvisory:z.string().max(250).optional()});
@@ -70,7 +70,7 @@ app.post('/api/admin/logout',requireAdmin,logout);
 app.get('/api/admin/targets',requireAdmin,(_req,res)=>res.json([...targets.values()]));
 app.post('/api/admin/import',requireAdmin,(req,res)=>{
  try{
-  const input=z.object({text:z.string().max(15000)}).parse(req.body);
+  const input=z.object({text:z.string().max(1500000)}).parse(req.body);
   res.json(importTargets(input.text));
  }catch(e){res.status(400).json({error:e instanceof Error?e.message:'Import error'});}
 });
@@ -82,8 +82,42 @@ app.post('/api/admin/verify',requireAdmin,async(req,res)=>{
  catch{res.status(400).json({error:'DNS TXT ownership record unavailable',target});}
 });
 let jobRunning=false;
+let verificationRunning=false;
+let verificationProgress={done:0,total:0,verified:0,failed:0};
+app.delete('/api/admin/targets',requireAdmin,(_req,res)=>{
+ if(jobRunning||verificationRunning){res.status(409).json({error:'Cannot clear the list during a scan or verification job'});return;}
+ const removed=targets.size;targets.clear();
+ verificationProgress={done:0,total:0,verified:0,failed:0};
+ res.json({removed,targets:[]});
+});
+app.post('/api/admin/verify-all',requireAdmin,(_req,res)=>{
+ if(verificationRunning||jobRunning){res.status(409).json({error:'Another batch operation is running'});return;}
+ const snapshot=[...targets.values()];
+ if(!snapshot.length){res.status(400).json({error:'No imported websites'});return;}
+ verificationRunning=true;
+ verificationProgress={done:0,total:snapshot.length,verified:0,failed:0};
+ res.status(202).json({accepted:snapshot.length});
+ void (async()=>{
+  try {
+   for(const target of snapshot){
+    target.status='VERIFYING';target.error=undefined;
+    try{
+     const result=await verifyTarget(target);
+     if(result)verificationProgress.verified++;
+     else verificationProgress.failed++;
+    }catch{
+     target.verified=false;target.status='UNVERIFIED';target.error='DNS TXT verification unavailable';
+     verificationProgress.failed++;
+    }
+    verificationProgress.done++;
+    await new Promise(resolve=>setTimeout(resolve,250));
+   }
+  }finally{verificationRunning=false;}
+ })();
+});
+
 app.post('/api/admin/run',requireAdmin,(_req,res)=>{
- if(jobRunning){res.status(409).json({error:'Batch already running'});return;}
+ if(jobRunning||verificationRunning){res.status(409).json({error:'Batch already running'});return;}
  const pending=[...targets.values()].filter(t=>t.verified);
  if(!pending.length){res.status(400).json({error:'No DNS-verified targets. Add each TXT token before batch scanning.'});return;}
  jobRunning=true;res.status(202).json({accepted:pending.length});
@@ -102,7 +136,7 @@ app.post('/api/admin/run',requireAdmin,(_req,res)=>{
   }finally{jobRunning=false;}
  })();
 });
-app.get('/api/admin/batch-status',requireAdmin,(_req,res)=>res.json({running:jobRunning,targets:[...targets.values()]}));
+app.get('/api/admin/batch-status',requireAdmin,(_req,res)=>res.json({running:jobRunning,verificationRunning,verificationProgress,targets:[...targets.values()]}));
 app.use(express.static(path.resolve('dist')));
 app.get('*',(_,res)=>res.sendFile(path.resolve('dist/index.html')));
 app.listen(Number(process.env.PORT||3001),'0.0.0.0');
