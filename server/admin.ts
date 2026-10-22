@@ -43,8 +43,6 @@ export type Target={url:string;host:string;token:string;verified:boolean;error?:
 export const targets=new Map<string,Target>();
 export function importTargets(lines:string){
  const entries=lines.split(/\r?\n/).map(s=>s.trim()).filter(s=>s&&!s.startsWith('#'));
- if(entries.length>100)throw Error('Maximum 100 domains per import');
- if(new Set([...targets.keys(),...entries.map(line=>{try{return validateTarget(line.includes('://')?line:'https://'+line).origin+'/'}catch{return line}})]).size>100)throw Error('Maximum 100 total domains');
  for(const line of entries){
   const u=validateTarget(line.includes('://')?line:'https://'+line);
   if(u.pathname!=='/'||u.search)throw Error('Please import hostnames or site root URLs only');
