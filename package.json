@@ -6,7 +6,8 @@
     "dev": "concurrently \"vite --host\" \"tsx watch server/index.ts\"",
     "build": "tsc --noEmit && vite build",
     "start": "tsx server/index.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "setup-admin": "node scripts/generate-admin-credentials.mjs"
   },
   "dependencies": {
     "express": "^4.21.2",
