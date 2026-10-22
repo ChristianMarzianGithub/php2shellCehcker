@@ -3,7 +3,7 @@ import {isIP} from 'node:net';
 export function validateTarget(raw:string):URL{
  let u:URL;try{u=new URL(raw)}catch{throw new Error('Invalid URL')}
  if(u.protocol!=='https:'||u.port&&u.port!=='443'||u.username||u.password)throw new Error('Only standard HTTPS URLs without credentials are supported');
- if(isIP(u.hostname.replace(/^\\[/,'').replace(/\\]$/,'')))throw new Error('IP literal targets are not allowed');
+ if(isIP(u.hostname.replaceAll('[','').replaceAll(']','')))throw new Error('IP literal targets are not allowed');
  if(u.hostname==='localhost'||u.hostname.endsWith('.local')||u.hostname.endsWith('.internal'))throw new Error('Internal host not allowed');
  return u;
 }
