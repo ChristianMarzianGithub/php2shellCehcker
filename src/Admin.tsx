@@ -1,0 +1,35 @@
+import React,{useEffect,useMemo,useState} from 'react';
+type Row={url:string;host:string;token:string;verified:boolean;status:string;error?:string;report?:{status:string;confidence:number;completeness:number;php:boolean;app:string;version:string|null;createdAt:string}};
+export default function Admin(){
+ const [password,setPassword]=useState(''),[auth,setAuth]=useState(false),[error,setError]=useState(''),[rows,setRows]=useState<Row[]>([]),[input,setInput]=useState(''),[sort,setSort]=useState('confidence'),[descending,setDescending]=useState(true),[running,setRunning]=useState(false),[busy,setBusy]=useState(false);
+ async function api(endpoint:string,options:RequestInit={}){const r=await fetch('/api/admin/'+endpoint,{credentials:'same-origin',headers:{'Content-Type':'application/json'},...options});const body=await r.json();if(!r.ok)throw Error(body.error||'Request failed');return body;}
+ async function refresh(){try{const j=await api('batch-status');setRows(j.targets);setRunning(j.running);setAuth(true);}catch{setAuth(false);}}
+ useEffect(()=>{void refresh()},[]);
+ useEffect(()=>{if(!auth||!running)return;const id=setInterval(()=>void refresh(),2000);return ()=>clearInterval(id)},[auth,running]);
+ async function login(e:React.FormEvent){e.preventDefault();setError('');try{await api('login',{method:'POST',body:JSON.stringify({password})});setPassword('');await refresh()}catch(e){setError(String(e))}}
+ async function importText(text:string){setError('');setBusy(true);try{const data=await api('import',{method:'POST',body:JSON.stringify({text})});setRows(data);}catch(e){setError(String(e))}finally{setBusy(false)}}
+ async function verify(row:Row){setError('');try{await api('verify',{method:'POST',body:JSON.stringify({url:row.url})});await refresh()}catch(e){setError(String(e))}}
+ async function start(){setError('');try{await api('run',{method:'POST',body:'{}'});setRunning(true);await refresh()}catch(e){setError(String(e))}}
+ const sorted=useMemo(()=>[...rows].sort((a,b)=>{const val=(r:Row):string|number=>sort==='confidence'?(r.report?.confidence??-1):sort==='completeness'?(r.report?.completeness??-1):sort==='php'?(r.report?.php?1:0):sort==='status'?r.report?.status||r.status:r.host;const x=val(a),y=val(b);return (typeof x==='number'&&typeof y==='number'?x-y:String(x).localeCompare(String(y)))*(descending?-1:1)}),[rows,sort,descending]);
+ function exportCsv(){const cell=(x:unknown)=>'"'+String(x??'').replaceAll('"','""')+'"';const data=[['Website','Scan status','PHP evidence','CMS','Reported PHP','Patch assessment','Confidence','Evidence categories'].join(','),...sorted.map(r=>[r.url,r.status,r.report?.php,r.report?.app,r.report?.version,r.report?.status,r.report?.confidence,r.report?.completeness].map(cell).join(','))].join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'text/csv'}));a.download='batch-results.csv';a.click();URL.revokeObjectURL(a.href)}
+ function example(){return Array.from({length:100},(_,i)=>'https://example-'+String(i+1).padStart(3,'0')+'.invalid').join('\n')}
+ return <section className="panel admin">
+  <h2>Administrator · Batch assessment</h2>
+  {!auth?<form onSubmit={login}><p className="hint">Sign in to manage authorized domains. Credentials remain on the server.</p><input type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Administrator password" required/><button type="submit">Sign in</button></form>:<>
+   <p className="hint">Import up to 100 websites (one per line). Each must have a matching DNS TXT ownership token before it can be scanned.</p>
+   <div className="adminTools">
+    <label className="upload">Import TXT <input type="file" accept=".txt,text/plain" onChange={async e=>{const file=e.target.files?.[0];if(file){if(file.size>15000){setError('TXT file must be 15 KB or smaller');return;}const text=await file.text();setInput(text);await importText(text)}}}/></label>
+    <button onClick={()=>{const blob=new Blob([example()],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='100-synthetic-websites.txt';a.click();URL.revokeObjectURL(a.href)}}>Download 100 test entries</button>
+    <button onClick={()=>void refresh()}>Refresh</button>
+    <button onClick={exportCsv}>Export CSV</button>
+    <button onClick={async()=>{await api('logout',{method:'POST',body:'{}'});setAuth(false);setRows([])}}>Log out</button>
+   </div>
+   <textarea rows={5} value={input} onChange={e=>setInput(e.target.value)} placeholder={'https://your-first-domain.example\nhttps://your-second-domain.example'}/>
+   <div className="adminTools"><button disabled={busy} onClick={()=>void importText(input)}>Import URLs</button><button disabled={running||!rows.some(r=>r.verified)} onClick={()=>void start()}>{running?'Batch running…':'Scan verified websites'}</button></div>
+   <p className="hint">{rows.length} imported · {rows.filter(r=>r.verified).length} verified · {rows.filter(r=>r.status==='DONE').length} completed. Scans run sequentially; results are held in server memory until restart.</p>
+   <div className="adminTools"><label>Sort by <select value={sort} onChange={e=>setSort(e.target.value)}><option value="confidence">Evidence confidence</option><option value="completeness">Evidence completeness</option><option value="php">PHP detected</option><option value="status">Assessment</option><option value="host">Domain</option></select></label><button onClick={()=>setDescending(!descending)}>{descending?'Descending ↓':'Ascending ↑'}</button></div>
+   <div className="tableScroll"><table><thead><tr><th>Domain</th><th>Authorization</th><th>Scan state</th><th>PHP / CMS</th><th>Assessment</th><th>Confidence</th><th>Evidence</th></tr></thead><tbody>{sorted.map(r=><tr key={r.url}><td><a href={r.url} target="_blank" rel="noreferrer">{r.host}</a></td><td>{r.verified?'Verified':<details><summary>Verify</summary><p className="hint">Add DNS TXT at:<code>_php2shell-check.{r.host}</code></p><code>{r.token}</code><p><button onClick={()=>void verify(r)}>Check TXT</button></p></details>}</td><td>{r.status}{r.error&&<p className="hint">{r.error}</p>}</td><td>{r.report?.php?'PHP hint':'Unknown'} / {r.report?.app||'—'}</td><td>{r.report?.status||'—'}</td><td>{r.report?.confidence??'—'}{r.report?'%':''}</td><td>{r.report?.completeness??'—'}</td></tr>)}</tbody></table></div>
+  </>}
+  {error&&<p className="error">{error}</p>}
+ </section>
+}
