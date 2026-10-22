@@ -51,9 +51,12 @@ export function createEvidenceReport(pages:Page[],owner:OwnerDiagnostics={}){
  const app=observations.find(e=>e.kind==='cms')?.value||'Unknown';
  const php=!!version||/php/i.test(powered)||phpIndicators.length>0;
  const versionSource=owner.version?'Owner supplied (not verified)':disclosed?'Public X-Powered-By header':'Unknown';
- const status=evaluation.status,confidence=evaluation.confidence;
+ const status=!owner.version && disclosed
+  ? (evaluation.status==='REPORTED PATCHED VERSION'?'INSUFFICIENT EVIDENCE':'POTENTIALLY VULNERABLE')
+  : evaluation.status;
+ const confidence=!owner.version && disclosed?40:evaluation.confidence;
  const completeness=[pages.length>0,phpIndicators.length>0,!!version,!!owner.distribution&&!!owner.packageRelease,!!vendorPatchEvidence].filter(Boolean).length;
- const detail=evaluation.detail+(vendorPatchEvidence?' A vendor advisory reference was supplied but is not automatically verified.':'');
+ const detail=(!owner.version&&disclosed?'An HTTP header suggests PHP '+disclosed+', but it may be stale, manipulated or emitted by a proxy. This cannot verify the actual runtime patch status. ':'' )+evaluation.detail+(vendorPatchEvidence?' A vendor advisory reference was supplied but is not automatically verified.':'');
  const sources=['https://github.com/NCSC-NL/php2shell','https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w','https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp'];
  const findings=cves.map(id=>({id,status,confidence,detail,impact:'If the running PHP runtime is affected and deployment conditions permit exploitation, attacker-controlled code could run with PHP worker privileges.'}));
  return {id:crypto.randomUUID(),url:first.url,createdAt:new Date().toISOString(),server:first.headers.server||first.headers.Server||'Not disclosed',php,version,app,status,confidence,detail,versionSource,
