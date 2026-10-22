@@ -1,3 +1,4 @@
+import {analyzeSiteVersions} from './versionClues.js';
 export const fixes:Record<string,number>={'8.2':35,'8.3':36,'8.4':27,'8.5':12};
 export const cves=['CVE-2026-109618','CVE-2026-109619'];
 export type Observation={kind:string;value:string;source:string;strength:'strong'|'medium'|'weak'};
@@ -41,7 +42,8 @@ export function createReport(url:string,headers:Record<string,string>,body:strin
 }
 export function createEvidenceReport(pages:Page[],owner:OwnerDiagnostics={}){
  if(!pages.length)throw new Error('No web pages collected');
- const observations=collectEvidence(pages),first=pages[0];
+ const clues=analyzeSiteVersions(pages);
+ const observations=[...collectEvidence(pages),...clues.evidence],first=pages[0];
  const powered=observations.find(e=>e.kind==='powered-by')?.value||'';
  const disclosed=powered.match(/PHP\/?\s*(\d+\.\d+\.\d+)/i)?.[1];
  const version=owner.version?.trim()||disclosed||null;
@@ -57,11 +59,11 @@ export function createEvidenceReport(pages:Page[],owner:OwnerDiagnostics={}){
  const confidence=!owner.version && disclosed?40:evaluation.confidence;
  const completeness=[pages.length>0,phpIndicators.length>0,!!version,!!owner.distribution&&!!owner.packageRelease,!!vendorPatchEvidence].filter(Boolean).length;
  const detail=(!owner.version&&disclosed?'An HTTP header suggests PHP '+disclosed+', but it may be stale, manipulated or emitted by a proxy. This cannot verify the actual runtime patch status. ':'' )+evaluation.detail+(vendorPatchEvidence?' A vendor advisory reference was supplied but is not automatically verified.':'');
- const sources=['https://github.com/NCSC-NL/php2shell','https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w','https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp'];
+ const sources=[...new Set([...clues.compatibility.map(x=>x.source),'https://github.com/NCSC-NL/php2shell','https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w','https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp'])];
  const findings=cves.map(id=>({id,status,confidence,detail,impact:'If the running PHP runtime is affected and deployment conditions permit exploitation, attacker-controlled code could run with PHP worker privileges.'}));
  return {id:crypto.randomUUID(),url:first.url,createdAt:new Date().toISOString(),server:first.headers.server||first.headers.Server||'Not disclosed',php,version,app,status,confidence,detail,versionSource,
  completeness,technologyStatus:php?'PHP INDICATORS FOUND':'PHP NOT ESTABLISHED',patchStatus:status,proxy:observations.some(e=>e.kind==='edge'||e.kind==='proxy'),
- pageCount:pages.length,ownerDiagnostics:{distribution:owner.distribution||'',packageRelease:owner.packageRelease||'',sapi:owner.sapi||'',vendorAdvisory:vendorPatchEvidence},evidence:observations,
+ pageCount:pages.length,compatibility:clues.compatibility,ownerDiagnostics:{distribution:owner.distribution||'',packageRelease:owner.packageRelease||'',sapi:owner.sapi||'',vendorAdvisory:vendorPatchEvidence},evidence:observations,
  observations:observations.map(e=>e.kind+': '+e.value),findings,
  recommendations:['Verify the actual web-serving PHP worker version; the CLI version may differ.','Match your OS distribution, package release and security advisory to vendor patch intelligence. Do not assume lower upstream versions are unpatched.','Upgrade to a release with upstream fixes (8.2.35, 8.3.36, 8.4.27, 8.5.12) or verified backported packages.','Restart PHP workers after patching and verify the active runtime.','Review web server/PHP logs for abnormal crashes or unexpected child processes.','Reduce service permissions and isolate affected workloads until fixed.'],sources};
 }
