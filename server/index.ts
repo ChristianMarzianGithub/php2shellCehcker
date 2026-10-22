@@ -31,9 +31,7 @@ async function readPublic(raw:string){
  }
  throw new Error('Too many redirects');
 }
-app.post('/api/scan',async(req,res)=>{
- const parsed=input.safeParse(req.body);if(!parsed.success){res.status(400).json({error:'Invalid input'});return;}
- try{
+async function assessWebsite(raw:string,owner:{version?:string;distribution?:string;packageRelease?:string;sapi?:string;vendorAdvisory?:string}={}){
   const first=await readPublic(parsed.data.url);
   const pages:Page[]=[first];
   // Only links explicitly present in homepage HTML, capped to two additional same-origin pages.
@@ -50,8 +48,11 @@ app.post('/api/scan',async(req,res)=>{
     if(new URL(page.url).origin===new URL(first.url).origin)pages.push(page);
    }catch{/* Secondary evidence is best effort; never fail main assessment. */}
   }
-  res.json(createEvidenceReport(pages,{version:parsed.data.ownerVersion,distribution:parsed.data.distribution,packageRelease:parsed.data.packageRelease,sapi:parsed.data.sapi,vendorAdvisory:parsed.data.vendorAdvisory}));
- }
+  return createEvidenceReport(pages,owner);
+}
+app.post('/api/scan',async(req,res)=>{
+ const parsed=input.safeParse(req.body);if(!parsed.success){res.status(400).json({error:'Invalid input'});return;}
+ try{res.json(await assessWebsite(parsed.data.url,{version:parsed.data.ownerVersion,distribution:parsed.data.distribution,packageRelease:parsed.data.packageRelease,sapi:parsed.data.sapi,vendorAdvisory:parsed.data.vendorAdvisory}));}
  catch(e){res.status(400).json({error:e instanceof Error?e.message:'Scan failed'});}
 });
 
@@ -111,8 +112,7 @@ app.post('/api/admin/verify-all',requireAdmin,(_req,res)=>{
        target.status='UNVERIFIED';target.error='Ownership verification no longer valid';
       }else{
        try{
-        const page=await readPublic(target.url);
-        target.report=createEvidenceReport([page]);target.status='DONE';
+        target.report=await assessWebsite(target.url);target.status='DONE';
        }catch(e){target.status='ERROR';target.error=e instanceof Error?e.message:'Scan failed';}
       }
      }else{
@@ -142,8 +142,7 @@ app.post('/api/admin/run',requireAdmin,(_req,res)=>{
     try{
      // Recheck authorization before each scan; only public HTTPS page is fetched.
      if(!await verifyTarget(target)){target.status='UNVERIFIED';continue;}
-     const page=await readPublic(target.url);
-     target.report=createEvidenceReport([page]);target.status='DONE';
+     target.report=await assessWebsite(target.url);target.status='DONE';
     }catch(e){target.status='ERROR';target.error=e instanceof Error?e.message:'Scan failed';}
     await new Promise(resolve=>setTimeout(resolve,1200));
    }
