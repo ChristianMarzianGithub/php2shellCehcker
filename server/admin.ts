@@ -16,7 +16,7 @@ export function checkPassword(password:string):boolean{
 function sign(token:string){return createHmac('sha256',secret).update(token).digest('hex');}
 export function issueSession(res:Response){
  const token=randomBytes(32).toString('hex');sessions.set(token,Date.now()+3600000);
- res.setHeader('Set-Cookie','scanner_admin='+token+'.'+sign(token)+'; HttpOnly; SameSite=Strict; Path=/api/admin; Max-Age=3600'+(process.env.NODE_ENV==='production'?'; Secure':''));
+ res.setHeader('Set-Cookie','scanner_admin='+token+'.'+sign(token)+'; HttpOnly; SameSite=Strict; Path=/api/admin; Max-Age=3600'+(process.env.ADMIN_COOKIE_SECURE==='true'?'; Secure':''));
 }
 export function requireAdmin(req:Request,res:Response,next:NextFunction){
  const cookie=(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith('scanner_admin='))?.slice(14)||'';
@@ -37,6 +37,7 @@ export const targets=new Map<string,Target>();
 export function importTargets(lines:string){
  const entries=lines.split(/\r?\n/).map(s=>s.trim()).filter(s=>s&&!s.startsWith('#'));
  if(entries.length>100)throw Error('Maximum 100 domains per import');
+ if(new Set([...targets.keys(),...entries.map(line=>{try{return validateTarget(line.includes('://')?line:'https://'+line).origin+'/'}catch{return line}})]).size>100)throw Error('Maximum 100 total domains');
  for(const line of entries){
   const u=validateTarget(line.includes('://')?line:'https://'+line);
   if(u.pathname!=='/'||u.search)throw Error('Please import hostnames or site root URLs only');
