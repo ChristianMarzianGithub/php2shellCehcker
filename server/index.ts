@@ -32,7 +32,7 @@ async function readPublic(raw:string){
  throw new Error('Too many redirects');
 }
 async function assessWebsite(raw:string,owner:{version?:string;distribution?:string;packageRelease?:string;sapi?:string;vendorAdvisory?:string}={}){
-  const first=await readPublic(parsed.data.url);
+  const first=await readPublic(raw);
   const pages:Page[]=[first];
   // Only links explicitly present in homepage HTML, capped to two additional same-origin pages.
   const links=[...first.body.matchAll(/<a\b[^>]*\bhref\s*=\s*["']([^"'#]+)["']/gi)];
