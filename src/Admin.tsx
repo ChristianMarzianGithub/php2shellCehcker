@@ -19,7 +19,7 @@ export default function Admin(){
  return <section className="panel admin">
   <h2>Administrator · Batch assessment</h2>
   {!auth?<form onSubmit={login}><p className="hint">Sign in to manage authorized domains. Credentials remain on the server.</p><input type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Administrator password" required/><button type="submit">Sign in</button></form>:<>
-   <p className="hint">Import websites (one per line). Each must have a matching DNS TXT ownership token before it can be scanned.</p>
+   <p className="hint">Import websites (one URL per line, including paths such as /witten). Each requires DNS TXT ownership verification for its hostname before batch scanning.</p>
    <div className="adminTools">
     <label className="upload">Import TXT <input type="file" accept=".txt,text/plain" onChange={async e=>{const file=e.target.files?.[0];if(file){if(file.size>1500000){setError('TXT file must be 1.5 MB or smaller');return;}const text=await file.text();setInput(text);await importText(text)}}}/></label>
     <button onClick={()=>{const blob=new Blob([example()],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='100-synthetic-websites.txt';a.click();URL.revokeObjectURL(a.href)}}>Download 100 test entries</button>
