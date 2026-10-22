@@ -3,3 +3,10 @@ services:
     build: .
     ports:
       - "8080:3001"
+    env_file:
+      - .env
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
