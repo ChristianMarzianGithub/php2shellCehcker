@@ -62,3 +62,16 @@ Owner-supplied information now accepts distribution, package release, web-servin
 ### Local validation
 
 Run `npm install && npm test && npm run build` after pulling the changes. Network-dependent scans should be tested only against a website you're authorized to assess. No live site was scanned during this code update.
+
+## CMS versions and historical hints
+
+Public HTML now provides additional weak evidence: WordPress generator/version hints, selected WordPress core asset query versions, Drupal generator versions, other generator strings, and copyright years. Core CMS versions are linked to a curated, dated compatibility mapping from WordPress and Drupal documentation.
+
+**Important:** CMS software compatibility is not the running PHP version. CSS/JS asset versions can be cache-busted or stale; copyright dates represent page content, not deployment age. These hints never cause a PHP2Shell finding to be classified as patched or affected.
+
+Compatibility references:
+- https://make.wordpress.org/core/handbook/references/php-compatibility-and-wordpress-versions/
+- https://make.wordpress.org/hosting/handbook/compatibility/
+- https://www.drupal.org/docs/getting-started/system-requirements/php-requirements
+
+Mapping reviewed: October 22, 2026. Joomla version-specific requirements and other CMS products are not yet mapped.
