@@ -100,17 +100,31 @@ app.post('/api/admin/verify-all',requireAdmin,(_req,res)=>{
  void (async()=>{
   try {
    for(const target of snapshot){
-    target.status='VERIFYING';target.error=undefined;
+    target.status='VERIFYING';target.error=undefined;target.report=undefined;
     try{
-     const result=await verifyTarget(target);
-     if(result)verificationProgress.verified++;
-     else verificationProgress.failed++;
+     // Ownership must be confirmed before performing even a passive batch assessment.
+     if(await verifyTarget(target)){
+      verificationProgress.verified++;
+      target.status='RUNNING';
+      // Re-check ownership immediately before scanning.
+      if(!await verifyTarget(target)){
+       target.status='UNVERIFIED';target.error='Ownership verification no longer valid';
+      }else{
+       try{
+        const page=await readPublic(target.url);
+        target.report=createEvidenceReport([page]);target.status='DONE';
+       }catch(e){target.status='ERROR';target.error=e instanceof Error?e.message:'Scan failed';}
+      }
+     }else{
+      verificationProgress.failed++;
+      target.status='UNVERIFIED';
+     }
     }catch{
-     target.verified=false;target.status='UNVERIFIED';target.error='DNS TXT verification unavailable';
+     target.verified=false;target.status='UNVERIFIED';target.error='DNS TXT ownership verification unavailable';
      verificationProgress.failed++;
     }
     verificationProgress.done++;
-    await new Promise(resolve=>setTimeout(resolve,250));
+    await new Promise(resolve=>setTimeout(resolve,1200));
    }
   }finally{verificationRunning=false;}
  })();
