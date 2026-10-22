@@ -50,3 +50,15 @@ Compare patch levels against the latest advisories before relying on any result:
 Source references reviewed: 2026-10-22.
 
 **Not yet implemented:** DNS TXT/HTTP token-based ownership verification, OS vendor backport database, direct PDF file generation, authenticated owner mode and persistent server-side history.
+
+## V2 evidence collection
+
+The scanner now performs at most three successful HTML fetches: the provided URL plus up to two links explicitly present in the returned HTML, restricted to the same origin. Each request revalidates DNS and pinned public IPs; redirects are independently validated. Secondary-page failures do not fail the initial report.
+
+The report includes an evidence ledger with the observation's originating URL and reliability label. It reports technology evidence, the provenance of a reported PHP version, patch-version assessment, proxy indications and an evidence-completeness tally separately.
+
+Owner-supplied information now accepts distribution, package release, web-serving SAPI and an optional advisory reference. This information is **not verified** and cannot be used by itself to mark the deployment patched. The full owner-verification workflow and automated vendor advisory matching are future work.
+
+### Local validation
+
+Run `npm install && npm test && npm run build` after pulling the changes. Network-dependent scans should be tested only against a website you're authorized to assess. No live site was scanned during this code update.
