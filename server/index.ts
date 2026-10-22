@@ -6,6 +6,7 @@ import {z} from 'zod';
 import {validateTarget,isPublicIp} from './validation.js';
 import {createEvidenceReport, type Page} from './assessment.js';
 import path from 'node:path';
+import {adminReady,checkPassword,issueSession,requireAdmin,logout,targets,importTargets,verifyTarget} from './admin.js';
 const app=express();app.disable('x-powered-by');app.use(express.json({limit:'5kb'}));
 const rate=new Map<string,{n:number;until:number}>();
 app.use('/api',(req,res,next)=>{const key=req.ip||'unknown',now=Date.now();let r=rate.get(key);if(!r||r.until<now)r={n:0,until:now+60000};r.n++;rate.set(key,r);if(r.n>10){res.status(429).json({error:'Too many scans'});return;}next();});
@@ -53,6 +54,52 @@ app.post('/api/scan',async(req,res)=>{
  }
  catch(e){res.status(400).json({error:e instanceof Error?e.message:'Scan failed'});}
 });
+
+const credentials=z.object({password:z.string().min(1).max(1024)});
+app.get('/api/admin/status',requireAdmin,(_req,res)=>res.json({ok:true}));
+app.post('/api/admin/login',(req,res)=>{
+ const p=credentials.safeParse(req.body);
+ if(!adminReady()){res.status(503).json({error:'Configure ADMIN_PASSWORD_HASH and ADMIN_SESSION_SECRET first'});return;}
+ if(!p.success||!checkPassword(p.data.password)){res.status(401).json({error:'Invalid credentials'});return;}
+ issueSession(res);res.json({ok:true});
+});
+app.post('/api/admin/logout',requireAdmin,logout);
+app.get('/api/admin/targets',requireAdmin,(_req,res)=>res.json([...targets.values()]));
+app.post('/api/admin/import',requireAdmin,(req,res)=>{
+ try{
+  const input=z.object({text:z.string().max(15000)}).parse(req.body);
+  res.json(importTargets(input.text));
+ }catch(e){res.status(400).json({error:e instanceof Error?e.message:'Import error'});}
+});
+app.post('/api/admin/verify',requireAdmin,async(req,res)=>{
+ const p=z.object({url:z.string()}).safeParse(req.body);
+ const target=p.success?targets.get(p.data.url):undefined;
+ if(!target){res.status(404).json({error:'Target not imported'});return;}
+ try{const verified=await verifyTarget(target);res.json({verified,target});}
+ catch{res.status(400).json({error:'DNS TXT ownership record unavailable',target});}
+});
+let jobRunning=false;
+app.post('/api/admin/run',requireAdmin,(_req,res)=>{
+ if(jobRunning){res.status(409).json({error:'Batch already running'});return;}
+ const pending=[...targets.values()].filter(t=>t.verified);
+ if(!pending.length){res.status(400).json({error:'No DNS-verified targets. Add each TXT token before batch scanning.'});return;}
+ jobRunning=true;res.status(202).json({accepted:pending.length});
+ void (async()=>{
+  try{
+   for(const target of pending){
+    target.status='RUNNING';target.error=undefined;
+    try{
+     // Recheck authorization before each scan; only public HTTPS page is fetched.
+     if(!await verifyTarget(target)){target.status='UNVERIFIED';continue;}
+     const page=await readPublic(target.url);
+     target.report=createEvidenceReport([page]);target.status='DONE';
+    }catch(e){target.status='ERROR';target.error=e instanceof Error?e.message:'Scan failed';}
+    await new Promise(resolve=>setTimeout(resolve,1200));
+   }
+  }finally{jobRunning=false;}
+ })();
+});
+app.get('/api/admin/batch-status',requireAdmin,(_req,res)=>res.json({running:jobRunning,targets:[...targets.values()]}));
 app.use(express.static(path.resolve('dist')));
 app.get('*',(_,res)=>res.sendFile(path.resolve('dist/index.html')));
 app.listen(Number(process.env.PORT||3001),'0.0.0.0');
