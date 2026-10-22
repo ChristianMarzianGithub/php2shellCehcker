@@ -7,8 +7,9 @@ describe('administrator domain import',()=>{
   expect(targets.size).toBe(2);
   expect([...targets.values()].every(t=>!t.verified)).toBe(true);
  });
- it('prevents oversized imports',()=>{
-  expect(()=>importTargets(Array.from({length:101},(_,i)=>'a'+i+'.example').join('\n'))).toThrow('Maximum 100');
+ it('allows more than 100 imported domains',()=>{
+  importTargets(Array.from({length:125},(_,i)=>'a'+i+'.example').join('\n'));
+  expect(targets.size).toBe(125);
  });
  it('rejects non-HTTPS and internal addresses',()=>{
   expect(()=>importTargets('http://example.org')).toThrow();
