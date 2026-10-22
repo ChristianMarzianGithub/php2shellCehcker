@@ -4,12 +4,12 @@ import {Agent,request} from 'undici';
 import {pinnedLookup} from './pinnedLookup.js';
 import {z} from 'zod';
 import {validateTarget,isPublicIp} from './validation.js';
-import {createReport} from './assessment.js';
+import {createEvidenceReport, type Page} from './assessment.js';
 import path from 'node:path';
 const app=express();app.disable('x-powered-by');app.use(express.json({limit:'5kb'}));
 const rate=new Map<string,{n:number;until:number}>();
 app.use('/api',(req,res,next)=>{const key=req.ip||'unknown',now=Date.now();let r=rate.get(key);if(!r||r.until<now)r={n:0,until:now+60000};r.n++;rate.set(key,r);if(r.n>10){res.status(429).json({error:'Too many scans'});return;}next();});
-const input=z.object({url:z.string().max(2048),ownerVersion:z.string().max(100).optional()});
+const input=z.object({url:z.string().max(2048),ownerVersion:z.string().max(100).optional(),distribution:z.string().max(90).optional(),packageRelease:z.string().max(100).optional(),sapi:z.string().max(80).optional(),vendorAdvisory:z.string().max(250).optional()});
 async function readPublic(raw:string){
  let url=validateTarget(raw);
  for(let hop=0;hop<4;hop++){
@@ -25,14 +25,32 @@ async function readPublic(raw:string){
    }
    let body='',bytes=0;
    for await(const chunk of response.body){bytes+=chunk.length;if(bytes>131072)throw new Error('Response exceeded safety limit');body+=chunk.toString('utf8');}
-   return {url:url.toString(),headers,body};
+   return {url:url.toString(),headers,body,statusCode:response.statusCode};
   }finally{await agent.close()}
  }
  throw new Error('Too many redirects');
 }
 app.post('/api/scan',async(req,res)=>{
  const parsed=input.safeParse(req.body);if(!parsed.success){res.status(400).json({error:'Invalid input'});return;}
- try{const r=await readPublic(parsed.data.url);res.json(createReport(r.url,r.headers,r.body,parsed.data.ownerVersion));}
+ try{
+  const first=await readPublic(parsed.data.url);
+  const pages:Page[]=[first];
+  // Only links explicitly present in homepage HTML, capped to two additional same-origin pages.
+  const links=[...first.body.matchAll(/<a\b[^>]*\bhref\s*=\s*["']([^"'#]+)["']/gi)];
+  const visited=new Set([first.url]);
+  for(const match of links){
+   if(pages.length>=3)break;
+   try{
+    const candidate=validateTarget(new URL(match[1],first.url).toString());
+    if(candidate.origin!==new URL(first.url).origin || visited.has(candidate.toString()))continue;
+    if(/\.(?:pdf|zip|png|jpg|gif|svg|mp4|webp|css|js|woff2?)(?:$|\?)/i.test(candidate.pathname))continue;
+    visited.add(candidate.toString());
+    const page=await readPublic(candidate.toString());
+    if(new URL(page.url).origin===new URL(first.url).origin)pages.push(page);
+   }catch{/* Secondary evidence is best effort; never fail main assessment. */}
+  }
+  res.json(createEvidenceReport(pages,{version:parsed.data.ownerVersion,distribution:parsed.data.distribution,packageRelease:parsed.data.packageRelease,sapi:parsed.data.sapi,vendorAdvisory:parsed.data.vendorAdvisory}));
+ }
  catch(e){res.status(400).json({error:e instanceof Error?e.message:'Scan failed'});}
 });
 app.use(express.static(path.resolve('dist')));
