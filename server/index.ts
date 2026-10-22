@@ -6,7 +6,7 @@ import {z} from 'zod';
 import {validateTarget,isPublicIp} from './validation.js';
 import {createEvidenceReport, type Page} from './assessment.js';
 import path from 'node:path';
-import {adminReady,checkPassword,issueSession,requireAdmin,logout,targets,importTargets,verifyTarget} from './admin.js';
+import {adminReady,adminConfigStatus,checkPassword,issueSession,requireAdmin,logout,targets,importTargets,verifyTarget} from './admin.js';
 const app=express();app.disable('x-powered-by');app.use(express.json({limit:'5kb'}));
 const rate=new Map<string,{n:number;until:number}>();
 app.use('/api',(req,res,next)=>{if(req.path.startsWith('/admin/')&&req.path!=='/admin/login')return next();const key=req.ip||'unknown',now=Date.now();let r=rate.get(key);if(!r||r.until<now)r={n:0,until:now+60000};r.n++;rate.set(key,r);if(r.n>10){res.status(429).json({error:'Too many scans'});return;}next();});
@@ -62,7 +62,7 @@ app.post('/api/admin/login',(req,res)=>{
  const key=req.ip||'unknown',now=Date.now();let attempt=loginAttempts.get(key);if(!attempt||attempt.until<now)attempt={n:0,until:now+900000};attempt.n++;loginAttempts.set(key,attempt);
  if(attempt.n>8){res.status(429).json({error:'Too many login attempts'});return;}
  const p=credentials.safeParse(req.body);
- if(!adminReady()){res.status(503).json({error:'Configure ADMIN_PASSWORD_HASH and ADMIN_SESSION_SECRET first'});return;}
+ if(!adminReady()){const s=adminConfigStatus();res.status(503).json({error:'Administrator setup incomplete: '+[!s.passwordConfigured?'set ADMIN_PASSWORD (14+ characters) or ADMIN_PASSWORD_HASH':null,!s.sessionSecretConfigured?'set ADMIN_SESSION_SECRET (32+ characters)':null].filter(Boolean).join('; ')+'. Restart the server after updating .env.'});return;}
  if(!p.success||!checkPassword(p.data.password)){res.status(401).json({error:'Invalid credentials'});return;}
  loginAttempts.delete(key);issueSession(res);res.json({ok:true});
 });
