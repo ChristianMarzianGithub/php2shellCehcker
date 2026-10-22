@@ -4,10 +4,16 @@ import type {Request,Response,NextFunction} from 'express';
 import {validateTarget} from './validation.js';
 const secret=process.env.ADMIN_SESSION_SECRET||'';
 const passwordHash=process.env.ADMIN_PASSWORD_HASH||'';
+const plainPassword=process.env.ADMIN_PASSWORD||'';
 const sessions=new Map<string,number>();
-export function adminReady(){return secret.length>=32&&passwordHash.startsWith('scrypt:');}
+export function adminReady(){return secret.length>=32&&(plainPassword.length>=14||passwordHash.startsWith('scrypt:'));}
 export function checkPassword(password:string):boolean{
  if(!adminReady())return false;
+ if(plainPassword.length>=14){
+  const supplied=createHmac('sha256',secret).update(password).digest();
+  const expected=createHmac('sha256',secret).update(plainPassword).digest();
+  return timingSafeEqual(supplied,expected);
+ }
  const [,salt,hex]=passwordHash.split(':');
  if(!salt||!hex||hex.length!==128)return false;
  const expected=Buffer.from(hex,'hex'),actual=scryptSync(password,salt,64);
