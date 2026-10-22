@@ -82,7 +82,7 @@ Mapping reviewed: October 22, 2026. Joomla version-specific requirements and oth
 2. Copy `.env.example` to `.env` and set `ADMIN_PASSWORD` to your own 14+ character password. Set `ADMIN_SESSION_SECRET` to a random 32+ character value, for example by running `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`. The existing `ADMIN_PASSWORD_HASH` format remains supported as an alternative.
 3. Run `docker compose up --build` (or set the same environment variables before `npm run dev`).
 4. Open **Administrator** in the application's left navigation and log in with your password.
-5. Import a TXT file with one HTTPS site root (or hostname) per line. There is no fixed website-count cap, though the import payload is limited to 1.5 MB and large batches take longer.
+5. Import a TXT file with one HTTPS website URL (or hostname) per line. There is no fixed website-count cap, though the import payload is limited to 1.5 MB and large batches take longer.
 6. For every domain under your control, publish a TXT record with name `_php2shell-check.yourdomain.example` and the corresponding verification value shown in the administrator table. Click **Check TXT**.
 7. Use **Verify all websites** to check the imported DNS TXT records sequentially, with progress displayed in the admin area. Use **Delete imported list** to clear all imported entries, tokens and results when no batch is running. Only DNS-verified domains can be batch-scanned. Use **Scan verified websites** to run sequential passive assessments. Progress refreshes automatically and results can be sorted by evidence confidence, completeness, PHP hints, assessment or domain. Export as CSV.
 
