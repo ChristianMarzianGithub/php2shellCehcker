@@ -1,0 +1,5 @@
+services:
+  scanner:
+    build: .
+    ports:
+      - "8080:3001"
