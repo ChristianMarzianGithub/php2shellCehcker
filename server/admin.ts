@@ -6,6 +6,7 @@ const secret=process.env.ADMIN_SESSION_SECRET||'';
 const passwordHash=process.env.ADMIN_PASSWORD_HASH||'';
 const plainPassword=process.env.ADMIN_PASSWORD||'';
 const sessions=new Map<string,number>();
+export function adminConfigStatus(){return {passwordConfigured:plainPassword.length>=14||passwordHash.startsWith('scrypt:'),sessionSecretConfigured:secret.length>=32};}
 export function adminReady(){return secret.length>=32&&(plainPassword.length>=14||passwordHash.startsWith('scrypt:'));}
 export function checkPassword(password:string):boolean{
  if(!adminReady())return false;
