@@ -7,6 +7,15 @@ describe('administrator domain import',()=>{
   expect(targets.size).toBe(2);
   expect([...targets.values()].every(t=>!t.verified)).toBe(true);
  });
+ it('accepts and preserves website paths and query parameters',()=>{
+  importTargets('https://www.cafedelsol.de/witten\nhttps://www.studienkreis.de/hattingen\nhttps://example.org/angebote?lang=de');
+  expect([...targets.keys()]).toEqual([
+   'https://www.cafedelsol.de/witten',
+   'https://www.studienkreis.de/hattingen',
+   'https://example.org/angebote?lang=de'
+  ]);
+  expect([...targets.values()].every(t=>!t.verified)).toBe(true);
+ });
  it('allows more than 100 imported domains',()=>{
   importTargets(Array.from({length:125},(_,i)=>'a'+i+'.example').join('\n'));
   expect(targets.size).toBe(125);
