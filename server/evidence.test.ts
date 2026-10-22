@@ -19,6 +19,11 @@ describe('evidence collection',()=>{
   expect(report.status).toBe('AFFECTED VERSION DETECTED');
   expect(report.detail).toContain('not automatically verified');
  });
+ it('does not treat a public PHP banner as proof of patch state',()=>{
+  const report=createEvidenceReport([{url:'https://example.org',statusCode:200,headers:{'x-powered-by':'PHP/8.3.36'},body:''}]);
+  expect(report.status).toBe('INSUFFICIENT EVIDENCE');
+  expect(report.versionSource).toBe('Public X-Powered-By header');
+ });
  it('does not pretend a fixed PHP version proves a fixed remote runtime',()=>{
   expect(assessVersion('8.3.36').status).toBe('REPORTED PATCHED VERSION');
  });
